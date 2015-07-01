@@ -3827,6 +3827,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 pfrom->AskFor(inv);
 
             if (inv.type == MSG_BLOCK) {
+//ALICHANGE-S:	Fill MSG_BLOCK entries into vHonestOnlyInv.
+				pfrom->AddInventoryHonest(inv);
+				{
+					LOCK(pfrom->cs_inventory);
+					pfrom->PushMessage("inv", pfrom->vPrivateInv);
+                }
+//ALICHANGE-E
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
                     // First request the headers preceeding the announced block. In the normal fully-synced
@@ -4673,11 +4680,29 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             }
             pto->vInventoryToSend = vInvWait;
         }
+//ALICHANGE-S:	CNodeState &honestpeerstate is assigned with state of honest node we are sending message to (pto)
+        CNodeState *honestpeerstate = State(pto->GetId());
         if (!vInv.empty())
-            pto->PushMessage("inv", vInv);
-
+		{
+			cout << "\n No. of elements in vInv: " << vInv.size() << "\n";
+            cout << "\n No. of elements in setInventoryKnown: " << pto->setInventoryKnown.size() << "\n";
+            cout << "\n No. of elements in vPrivateInv: " << pto->vPrivateInv.size() << "\n";
+            cout << "\n No. of elements in vHonestOnlyInv: " << pto->vHonestOnlyInv.size() << "\n";
+            cout << "\n Updating peer information through ProcessBlockAvailability ... \n";
+            ProcessBlockAvailability(pto->GetId());
+			cout << "\n Height of The best known block we know this peer has announced: " << honestpeerstate->pindexBestKnownBlock->nHeight << "\n";
+			//"Publish every second hidden block, if ahead"
+			if ((pto->vPrivateInv.size() - honestpeerstate->pindexLastCommonBlock->nHeight)%2 != 0 && (pto->vPrivateInv.size() - honestpeerstate->pindexLastCommonBlock->nHeight) > 0)
+			{
+				//alicounter++;
+				//goto causes "pto->PushMessage("inv", vInv);" to be skipped, i.e. this causes forking!
+				goto DETECTSTALLING;
+			}
+			pto->PushMessage("inv", vInv);
+		}
         // Detect whether we're stalling
-        int64_t nNow = GetTimeMicros();
+        DETECTSTALLING: int64_t nNow = GetTimeMicros();
+//ALICHANGE-E
         if (!pto->fDisconnect && state.nStallingSince && state.nStallingSince < nNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection

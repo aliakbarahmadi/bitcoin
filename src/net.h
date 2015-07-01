@@ -291,6 +291,11 @@ public:
     // inventory based relay
     mruset<CInv> setInventoryKnown;
     std::vector<CInv> vInventoryToSend;
+//ALICHANGE-S:	Private inventory of self-mined blocks and blocks that were updated to 
+    std::vector<CInv> vPrivateInv;
+    //Public inventory of blocks received from honest peers through "inv" messages.
+    std::vector<CInv> vHonestOnlyInv;
+//ALICHANGE-E	
     CCriticalSection cs_inventory;
     std::multimap<int64_t, CInv> mapAskFor;
 
@@ -381,7 +386,15 @@ public:
         }
     }
 
-
+//ALICHANGE-S:	This function shall fill vHonestOnlyInv with MSG_BLOCK inventory types received from honest peers.
+	void AddInventoryHonest(const CInv& inv)
+	{
+		{
+			LOCK(cs_inventory);
+			vHonestOnlyInv.push_back(inv);			
+		}
+	}
+	
     void AddInventoryKnown(const CInv& inv)
     {
         {
@@ -396,6 +409,9 @@ public:
             LOCK(cs_inventory);
             if (!setInventoryKnown.count(inv))
                 vInventoryToSend.push_back(inv);
+                //Fill this clone with inventories
+                vPrivateInv.push_back(inv);
+//ALICHANGE-E
         }
     }
 
